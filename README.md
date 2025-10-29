@@ -1,4 +1,4 @@
-# LangGraph Supervisor Agent
+# LangGraph Agent
 
 Build a single-agent, end-to-end local architecture that can be exercised from Postman, the terminal, or any frontend. The agent supports multi-turn conversations and retains short-term memory of prior messages so it can reason over the conversation history.
 
