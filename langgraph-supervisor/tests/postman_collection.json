@@ -1,0 +1,238 @@
+{
+  "info": {
+    "name": "LangGraph Single Agent API",
+    "description": "Complete API testing collection for LangChain v1 Single Agent",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8001",
+      "type": "string"
+    },
+    {
+      "key": "conversation_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Create Session",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.collectionVariables.set(\"conversation_id\", jsonData.conversation_id);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": \"sumer.choudhary@bitcot.com\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/sessions",
+          "host": ["{{base_url}}"],
+          "path": ["sessions"]
+        }
+      }
+    },
+    {
+      "name": "Chat - Account Overview (card_key: account_overview)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"show account overview\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"account_id\": \"A-011977763\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/chat",
+          "host": ["{{base_url}}"],
+          "path": ["chat"]
+        }
+      }
+    },
+    {
+      "name": "Chat - Specific Follow-up (card_key: other)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"how many do i need to go to next tier\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"account_id\": \"A-011977763\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/chat",
+          "host": ["{{base_url}}"],
+          "path": ["chat"]
+        }
+      }
+    },
+    {
+      "name": "Chat - Facility Details (card_key: facility_overview)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"facility details\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"account_id\": \"A-011977763\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/chat",
+          "host": ["{{base_url}}"],
+          "path": ["chat"]
+        }
+      }
+    },
+    {
+      "name": "Chat - Facility by ID (card_key: facility_overview)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"show facility details\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"facility_id\": \"F-015766066\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/chat",
+          "host": ["{{base_url}}"],
+          "path": ["chat"]
+        }
+      }
+    },
+    {
+      "name": "Chat - Save Note (card_key: note_overview)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"save note: Meeting with Dimod Account completed. Action items: send pricing deck.\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/chat",
+          "host": ["{{base_url}}"],
+          "path": ["chat"]
+        }
+      }
+    },
+    {
+      "name": "Chat - Fetch All Notes (card_key: note_overview)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"fetch all notes\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/chat",
+          "host": ["{{base_url}}"],
+          "path": ["chat"]
+        }
+      }
+    },
+    {
+      "name": "Chat - Fetch Last 2 Notes",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"fetch last 2 notes\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/chat",
+          "host": ["{{base_url}}"],
+          "path": ["chat"]
+        }
+      }
+    },
+    {
+      "name": "Chat - Fetch Notes by Date",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"fetch notes for 29/10/2025\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/chat",
+          "host": ["{{base_url}}"],
+          "path": ["chat"]
+        }
+      }
+    },
+    {
+      "name": "List Sessions",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/sessions",
+          "host": ["{{base_url}}"],
+          "path": ["sessions"]
+        }
+      }
+    },
+    {
+      "name": "Get Session",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/sessions/{{conversation_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["sessions", "{{conversation_id}}"]
+        }
+      }
+    },
+    {
+      "name": "Get Conversation History",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/sessions/{{conversation_id}}/history?include_metadata=true",
+          "host": ["{{base_url}}"],
+          "path": ["sessions", "{{conversation_id}}", "history"],
+          "query": [{"key": "include_metadata", "value": "true"}]
+        }
+      }
+    },
+    {
+      "name": "Delete Session",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/sessions/{{conversation_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["sessions", "{{conversation_id}}"]
+        }
+      }
+    }
+  ]
+}
