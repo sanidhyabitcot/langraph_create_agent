@@ -25,7 +25,7 @@ load_dotenv()
 async def lifespan(app: FastAPI):
     # Startup: initialize agent
     api_key = os.getenv("OPENAI_API_KEY")
-    model_name = os.getenv("OPENAI_MODEL", "gpt-4")
+    model_name = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     if not api_key:
         print("WARNING: OPENAI_API_KEY not found in environment. Set it in .env to enable the agent.")
     else:
@@ -68,11 +68,12 @@ def run_cli(args):
     """Run in CLI mode"""
     # Initialize agent
     api_key = os.getenv("OPENAI_API_KEY")
+    model_name = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     if not api_key:
         print("ERROR: OPENAI_API_KEY not found in .env file")
         sys.exit(1)
     
-    initialize_agent(api_key=api_key)
+    initialize_agent(api_key=api_key, model_name=model_name)
     agent = get_agent()
     
     if args.start_session:
@@ -105,10 +106,14 @@ def run_cli(args):
         # Get conversation history
         conversation_history = session_service.get_conversation_history(session_id)
         
+        # Get user_id from session if available
+        user_id = session.user_id if session else args.user_id
+        
         # Process message (support memory via conversation_id)
         result = agent.process_message(
             args.message,
             conversation_history,
+            user_id=user_id,
             conversation_id=session_id,
         )
         

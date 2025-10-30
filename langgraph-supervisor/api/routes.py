@@ -51,9 +51,10 @@ async def health_check():
     """Health check endpoint"""
     from agent import get_agent
     agent = get_agent()
+    model_name = getattr(agent.model, "model_name", "gpt-4o-mini") if hasattr(agent, "model") else "gpt-4o-mini"
     return HealthResponse(
         status="healthy",
-        agent_model="gpt-4",
+        agent_model=model_name,
         active_sessions=len(session_service.sessions)
     )
 
@@ -116,6 +117,7 @@ async def chat(request: ChatRequest):
             conversation_history=conversation_history,
             account_id=request.account_id,
             facility_id=request.facility_id,
+            user_id=request.user_id,
             conversation_id=request.conversation_id  # Pass conversation_id for memory
         )
         

@@ -1,6 +1,7 @@
 """
 Single Agent
 Main agent using LangGraph for state management and tool orchestration
+Uses structured output and agentic decision-making
 """
 import os
 import logging
@@ -10,6 +11,7 @@ from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver
 
 from agent.tools import ALL_TOOLS
+from api.response_models import AgentOutput
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,13 +24,13 @@ class SingleAgent:
     Uses LangGraph for state management
     """
     
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "gpt-4"):
+    def __init__(self, api_key: Optional[str] = None, model_name: str = "gpt-4o-mini"):
         """
-        Initialize the single agent
+        Initialize the single agent with structured output
         
         Args:
             api_key: OpenAI API key (defaults to env variable)
-            model_name: OpenAI model to use
+            model_name: OpenAI model to use (defaults to gpt-4o-mini)
         """
         try:
             logger.info(f"Initializing SingleAgent with model: {model_name}")
@@ -39,13 +41,13 @@ class SingleAgent:
             elif "OPENAI_API_KEY" not in os.environ:
                 raise ValueError("OPENAI_API_KEY must be provided or set in environment")
             
-            # Initialize OpenAI model
+            # Initialize OpenAI model - structured output will be handled by create_agent via response_format
             self.model = ChatOpenAI(
                 model=model_name,
                 temperature=0.7
             )
             
-            # System prompt for the agent with structured output requirement
+            # System prompt - guides agent without hardcoded rules
             self.system_prompt = """You are a helpful AI assistant with access to specialized tools.
 
 Your capabilities:
@@ -54,59 +56,48 @@ Your capabilities:
 3. Save notes - Store meeting minutes or notes for users
 4. Fetch notes - Retrieve saved notes by user, date, or recent history
 
-CRITICAL REQUIREMENT - STRUCTURED OUTPUT:
-You MUST respond in TWO formats:
-1. Natural Language Response - A friendly, conversational response
-2. Structured JSON Output - A well-organized JSON structure with the data
+IMPORTANT GUIDELINES:
+- Always respond to the user's query with a helpful, natural language response in final_response
+- DO NOT simply repeat or echo the user's input - provide meaningful information
+- Use tools intelligently when needed - decide which tools to call based on the query
+- Account ID, facility ID, and user ID are available in the config - extract them when needed for tools
+- When a user asks "show account overview" or similar, you MUST:
+  1. Call the appropriate tool (e.g., fetch_account_details) to get the data
+  2. Extract the relevant information from the tool response
+  3. Populate the account_overview field with the structured data
+  4. Set card_key to "account_overview" 
+  5. Provide a helpful summary in final_response explaining what was retrieved
 
-Guidelines:
-- Be conversational and professional in natural language
-- Use tools when needed to answer user questions
-- Maintain context from previous messages in the conversation
-- Provide clear, structured responses
-- When saving notes, confirm what was saved
-- When fetching data, present it in a user-friendly format
-- If you need more information, ask the user
-- ALWAYS structure your response data in JSON format
+CARD_KEY SELECTION RULES (read the AgentOutput.card_key field description for details):
+- "account_overview": Use when user explicitly requests COMPLETE/FULL account information
+- "facility_overview": Use when user explicitly requests COMPLETE/FULL facility information
+- "rewards_overview": Use when user explicitly requests COMPLETE/FULL rewards information
+- "order_overview": Use when user explicitly requests COMPLETE/FULL order information
+- "note_overview": Use when user requests to FETCH/LIST/DISPLAY/SHOW notes
+- "other": Use for specific single-field questions, greetings, follow-ups, or analysis requests
 
-For structured output, use this format:
-{
-  "intent": "account_query|facility_query|note_operation|general",
-  "entities": {
-    "account_id": "string or null",
-    "facility_id": "string or null",
-    "user_id": "string or null"
-  },
-  "data": {
-    // Extracted data from tools or response
-  },
-  "metadata": {
-    "confidence": "high|medium|low",
-    "tools_used": ["tool_names"]
-  }
-}
+When calling tools:
+- Extract account_id, facility_id, or user_id from the config if needed
+- Process the tool results and populate the appropriate overview fields in structured format
+- Provide a clear, helpful summary in final_response
 
-ALWAYS do the following when certain IDs are provided:
-- If an account_id is present, you MUST call `fetch_account_details(account_id)` and then:
-  - set card_key to `account_overview`
-  - include the returned account object in `account_overview` as a single-item list
-  - summarize the key fields in the natural language final_response as a bullet list
-- If a facility_id is present, you MUST call `fetch_facility_details(facility_id)` and set card_key to `facility_overview` similarly.
-
-Always strive to be helpful, accurate, and efficient in your responses."""
+Always be helpful, accurate, and efficient. Make tool calls when you need data to answer the user's question."""
             
             # Initialize checkpointer for short-term memory
             self.checkpointer = InMemorySaver()
             
-            # Create the agent using LangChain v1's create_agent with checkpointer
+            # Create the agent using LangChain v1's create_agent with response_format
+            # This automatically selects ProviderStrategy for OpenAI models or ToolStrategy for others
+            # The structured response will be in result["structured_response"]
             self.agent = create_agent(
                 model=self.model,
                 tools=ALL_TOOLS,
                 system_prompt=self.system_prompt,
-                checkpointer=self.checkpointer
+                checkpointer=self.checkpointer,
+                response_format=AgentOutput  # Pass schema type directly - auto-selects best strategy
             )
             
-            logger.info("SingleAgent initialized successfully")
+            logger.info("SingleAgent initialized successfully with structured output")
             
         except Exception as e:
             logger.error(f"Error initializing SingleAgent: {str(e)}", exc_info=True)
@@ -118,6 +109,7 @@ Always strive to be helpful, accurate, and efficient in your responses."""
         conversation_history: List[Dict[str, str]],
         account_id: Optional[str] = None,
         facility_id: Optional[str] = None,
+        user_id: Optional[str] = None,
         conversation_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -126,8 +118,9 @@ Always strive to be helpful, accurate, and efficient in your responses."""
         Args:
             user_message: The current user message
             conversation_history: List of previous messages
-            account_id: Optional account ID for context
-            facility_id: Optional facility ID for context
+            account_id: Optional account ID (passed via config)
+            facility_id: Optional facility ID (passed via config)
+            user_id: Optional user ID (passed via config)
             conversation_id: Conversation ID for short-term memory
             
         Returns:
@@ -139,115 +132,144 @@ Always strive to be helpful, accurate, and efficient in your responses."""
             
             # Build messages list with history
             messages = conversation_history.copy()
-            
-            # Add context if IDs provided
-            context_message = ""
-            if account_id:
-                context_message += f"Context: User is asking about account_id: {account_id}. "
-            if facility_id:
-                context_message += f"Context: User is asking about facility_id: {facility_id}. "
-            
-            if context_message:
-                user_message = context_message + user_message
-            
             messages.append({"role": "user", "content": user_message})
             
-            # Prepare config with thread_id for short-term memory
-            config = {}
+            # Prepare config with thread_id and IDs for tools
+            config = {"configurable": {}}
             if conversation_id:
-                config = {"configurable": {"thread_id": conversation_id}}
+                config["configurable"]["thread_id"] = conversation_id
+            if account_id:
+                config["configurable"]["account_id"] = account_id
+            if facility_id:
+                config["configurable"]["facility_id"] = facility_id
+            if user_id:
+                config["configurable"]["user_id"] = user_id
             
-            # Invoke the agent
+            logger.info(f"Config: account_id={account_id}, facility_id={facility_id}, user_id={user_id}")
+            
+            # Invoke the agent - structured output will be in result["structured_response"]
             result = self.agent.invoke({"messages": messages}, config)
             
-            # Extract the assistant's response
+            # Extract structured output from agent response
+            # According to LangChain docs, structured output is in result["structured_response"]
+            structured_output = None
             assistant_message = ""
             tool_calls = []
-            structured_response = None
             
+            # Check for structured_response in result (as per LangChain documentation)
+            if "structured_response" in result:
+                structured_output = result["structured_response"]
+                if isinstance(structured_output, AgentOutput):
+                    assistant_message = structured_output.final_response
+                    logger.info(f"Found structured_response in result. Card key: {structured_output.card_key}")
+            
+            # Also extract messages for tool calls and fallback content
             if "messages" in result:
-                # Get the last message from the agent
+                # Get assistant message content for fallback
                 for msg in reversed(result["messages"]):
-                    if hasattr(msg, "content") and msg.content:
-                        assistant_message = msg.content
-                        break
-                    elif isinstance(msg, dict) and msg.get("content"):
-                        assistant_message = msg["content"]
+                    if hasattr(msg, "content") and msg.content and not assistant_message:
+                        if isinstance(msg.content, str):
+                            assistant_message = msg.content
+                    elif isinstance(msg, dict) and msg.get("content") and not assistant_message:
+                        assistant_message = msg.get("content", "")
+                    
+                    if assistant_message:
                         break
                 
                 # Extract tool usage information
                 for msg in result["messages"]:
-                    if hasattr(msg, "additional_kwargs"):
-                        if "tool_calls" in msg.additional_kwargs:
-                            for tool_call in msg.additional_kwargs["tool_calls"]:
-                                tool_calls.append({
-                                    "tool": tool_call.get("function", {}).get("name"),
-                                    "arguments": tool_call.get("function", {}).get("arguments")
-                                })
+                    if hasattr(msg, "additional_kwargs") and "tool_calls" in getattr(msg, "additional_kwargs", {}):
+                        for tool_call in msg.additional_kwargs["tool_calls"]:
+                            tool_calls.append({
+                                "tool": tool_call.get("function", {}).get("name"),
+                                "arguments": tool_call.get("function", {}).get("arguments")
+                            })
+                    elif isinstance(msg, dict) and msg.get("additional_kwargs", {}).get("tool_calls"):
+                        for tool_call in msg["additional_kwargs"]["tool_calls"]:
+                            tool_calls.append({
+                                "tool": tool_call.get("function", {}).get("name"),
+                                "arguments": tool_call.get("function", {}).get("arguments")
+                            })
             
-            # Extract structured response if available
-            if "structured_response" in result:
-                structured_response = result["structured_response"]
-                logger.info(f"Structured response received: {structured_response}")
+            # If we got structured output, use it directly
+            if structured_output and isinstance(structured_output, AgentOutput):
+                logger.info(f"Using structured output from agent. Card key: {structured_output.card_key}")
+                # Convert AgentOutput to dict format
+                response = {
+                    "final_response": structured_output.final_response,
+                    "card_key": structured_output.card_key,
+                    "account_overview": [
+                        acc.model_dump() for acc in (structured_output.account_overview or [])
+                    ] if structured_output.account_overview else None,
+                    "rewards_overview": [
+                        rew.model_dump() for rew in (structured_output.rewards_overview or [])
+                    ] if structured_output.rewards_overview else None,
+                    "facility_overview": [
+                        fac.model_dump() for fac in (structured_output.facility_overview or [])
+                    ] if structured_output.facility_overview else None,
+                    "order_overview": [
+                        ord.model_dump() for ord in (structured_output.order_overview or [])
+                    ] if structured_output.order_overview else None,
+                    "note_overview": [
+                        note.model_dump() for note in (structured_output.note_overview or [])
+                    ],
+                    "tool_calls": tool_calls,
+                    "success": True
+                }
+                logger.info(f"Message processed successfully. Card key: {structured_output.card_key}")
+                return response
             
-            # Determine card_key and extract data based on tools used
-            card_key, data_dict = self._extract_data_from_tools(
-                tool_calls=tool_calls,
-                account_id=account_id,
-                facility_id=facility_id,
-                structured_response=structured_response,
-                user_message=user_message
-            )
-
-            # Intent heuristics based on user query
-            user_lower = (user_message or "").lower()
-            is_overview = any(k in user_lower for k in [
-                "overview", "show account", "account summary", "summary"
-            ])
-            is_specific = any(k in user_lower for k in [
-                "how many", "points", "tier", "rewards", "free vial"
-            ])
-            is_facility = "facility" in user_lower or "facilities" in user_lower
-
-            # Card selection rules
-            if account_id:
-                if is_overview and data_dict.get("account_overview"):
-                    card_key = "account_overview"
-                elif is_specific:
-                    # For specific questions we surface 'other' card and hide overview payload
-                    card_key = "other"
-                    data_dict["account_overview"] = []
-            if (facility_id or is_facility) and data_dict.get("facility_overview"):
-                if is_overview or is_facility:
-                    card_key = "facility_overview"
+            # Try parsing assistant_message as JSON and creating AgentOutput
+            if assistant_message and not structured_output:
+                try:
+                    import json
+                    # Try parsing as JSON
+                    if isinstance(assistant_message, str):
+                        parsed = json.loads(assistant_message)
+                    else:
+                        parsed = assistant_message
+                    
+                    if isinstance(parsed, dict):
+                        # Try to create AgentOutput from parsed dict
+                        structured_output = AgentOutput(**parsed)
+                        logger.info("Parsed structured output from message content")
+                        return {
+                            "final_response": structured_output.final_response,
+                            "card_key": structured_output.card_key,
+                            "account_overview": [
+                                acc.model_dump() for acc in (structured_output.account_overview or [])
+                            ] if structured_output.account_overview else None,
+                            "rewards_overview": [
+                                rew.model_dump() for rew in (structured_output.rewards_overview or [])
+                            ] if structured_output.rewards_overview else None,
+                            "facility_overview": [
+                                fac.model_dump() for fac in (structured_output.facility_overview or [])
+                            ] if structured_output.facility_overview else None,
+                            "order_overview": [
+                                ord.model_dump() for ord in (structured_output.order_overview or [])
+                            ] if structured_output.order_overview else None,
+                            "note_overview": [
+                                note.model_dump() for note in (structured_output.note_overview or [])
+                            ],
+                            "tool_calls": tool_calls,
+                            "success": True
+                        }
+                except Exception as parse_error:
+                    logger.debug(f"Could not parse structured output: {parse_error}")
             
-            # Optionally enrich natural language summary deterministically from structured data
-            nl_response = assistant_message or "I'm here to help! How can I assist you?"
-            user_lower = (user_message or "").lower()
-            if data_dict.get("account_overview") and len(data_dict["account_overview"]) > 0:
-                acc_obj = data_dict["account_overview"][0]
-                if any(k in user_lower for k in ["reward", "loyalty", "points", "tier", "free vial", "free vials"]):
-                    nl_response = self._build_rewards_summary(acc_obj)
-                elif any(k in user_lower for k in ["overview", "show account", "account summary", "summary"]):
-                    nl_response = self._build_account_summary(acc_obj)
-            elif data_dict.get("facility_overview") and len(data_dict["facility_overview"]) > 0:
-                nl_response = self._build_facility_summary(data_dict["facility_overview"][0])
-            elif any(k in user_lower for k in ["note", "notes"]):
-                # Build note summary if available
-                notes = data_dict.get("note_overview") or []
-                nl_response = self._build_notes_summary(notes)
-
-            # Build final response with both natural language and structured data
-            response = {
-                "final_response": nl_response,
-                "card_key": card_key,
+            # Ultimate fallback - return basic response
+            logger.warning("Structured output not found, using basic fallback response")
+            return {
+                "final_response": assistant_message or "I'm here to help! How can I assist you?",
+                "card_key": "other",
+                "account_overview": None,
+                "rewards_overview": None,
+                "facility_overview": None,
+                "order_overview": None,
+                "note_overview": [],
                 "tool_calls": tool_calls,
-                "success": True,
-                **data_dict
+                "success": True
             }
-            
-            logger.info(f"Message processed successfully. Card key: {card_key}")
-            return response
             
         except Exception as e:
             logger.error(f"Error processing message: {str(e)}", exc_info=True)
@@ -263,225 +285,6 @@ Always strive to be helpful, accurate, and efficient in your responses."""
                 "error": str(e)
             }
     
-    def _extract_data_from_tools(
-        self,
-        tool_calls: List[Dict[str, Any]],
-        account_id: Optional[str] = None,
-        facility_id: Optional[str] = None,
-        structured_response: Optional[Any] = None,
-        user_message: Optional[str] = None
-    ) -> tuple[str, Dict[str, Any]]:
-        """Extract data from tool results and determine card_key"""
-        from services import account_service, facility_service, notes_service
-        
-        try:
-            logger.info("Extracting data from tools and structured response")
-            
-            # Initialize response structure
-            data_dict = {
-                "account_overview": None,
-                "rewards_overview": None,
-                "facility_overview": None,
-                "order_overview": None,
-                "note_overview": []
-            }
-            
-            card_key = "general"
-            
-            # Use structured response if available
-            if structured_response:
-                if hasattr(structured_response, 'card_key'):
-                    card_key = structured_response.card_key
-                    logger.info(f"Card key from structured response: {card_key}")
-                if hasattr(structured_response, 'data') and structured_response.data:
-                    data_dict.update(structured_response.data)
-            
-            # Check which tools were used and fetch data
-            for tool_call in tool_calls:
-                tool_name = tool_call.get("tool")
-                logger.info(f"Processing tool: {tool_name}")
-                
-                if tool_name == "fetch_account_details":
-                    result = account_service.get_account_details(account_id if account_id else "A-011977763")
-                    if result.get("success"):
-                        account_data = result.get("data")
-                        data_dict["account_overview"] = [account_data]
-                        card_key = "account_overview"
-                        logger.info("Account data fetched successfully")
-                
-                elif tool_name == "fetch_facility_details":
-                    result = facility_service.get_facility_details(facility_id if facility_id else "F-015766066")
-                    if result.get("success"):
-                        facility_data = result.get("data")
-                        data_dict["facility_overview"] = [facility_data]
-                        card_key = "facility_overview"
-                        logger.info("Facility data fetched successfully")
-                
-                elif tool_name == "fetch_notes":
-                    result = notes_service.fetch_notes(last_n=5)
-                    if result.get("success"):
-                        data_dict["note_overview"] = result.get("data", [])
-                        card_key = "note_overview"
-                        logger.info("Notes fetched successfully")
-            
-            # Fallbacks: if IDs were supplied but the LLM did not call tools, fetch directly
-            if account_id and data_dict.get("account_overview") is None:
-                result = account_service.get_account_details(account_id)
-                if result.get("success"):
-                    data_dict["account_overview"] = [result.get("data")]
-                    card_key = "account_overview"
-                    logger.info("Account data fetched by fallback")
-            if facility_id and data_dict.get("facility_overview") is None:
-                result = facility_service.get_facility_details(facility_id)
-                if result.get("success"):
-                    data_dict["facility_overview"] = [result.get("data")]
-                    card_key = "facility_overview"
-                    logger.info("Facility data fetched by fallback")
-
-            # Facility intent without facility_id: derive from account
-            user_lower = (user_message or "").lower()
-            if ("facility" in user_lower or "facilities" in user_lower) and not facility_id:
-                # If we have account data, surface its facilities
-                try:
-                    if not data_dict.get("facility_overview"):
-                        from services import facility_service as fac_svc
-                        fac_all = fac_svc.get_all_facilities()
-                        if fac_all.get("success"):
-                            fac_list = fac_all["data"].get("facility_overview", [])
-                            filtered = [f for f in fac_list if f.get("account_id") == (account_id or "")]
-                            if filtered:
-                                data_dict["facility_overview"] = filtered
-                                card_key = "facility_overview"
-                                logger.info("Facility data derived from account context")
-                except Exception as fe:
-                    logger.error(f"Error deriving facility overview: {fe}")
-
-            # Notes intent: derive parameters and fetch via service when needed
-            if ("note" in user_lower or "notes" in user_lower):
-                try:
-                    import re
-                    m = re.search(r"(last|first)\s+(\d+)", user_lower)
-                    order = "desc"
-                    last_n = 5
-                    if m:
-                        pos, num = m.group(1), int(m.group(2))
-                        last_n = num
-                        if pos == "first":
-                            order = "asc"
-                    # date extraction like 29/10/2025 or 2025-10-29
-                    date = None
-                    mdate = re.search(r"(\d{2}/\d{2}/\d{4}|\d{4}-\d{2}-\d{2})", user_lower)
-                    if mdate:
-                        date = mdate.group(1)
-                    from services import notes_service as ns
-                    result = ns.fetch_notes(user_id=None, date=date, last_n=last_n, order=order)
-                    if result.get("success"):
-                        data_dict["note_overview"] = result.get("data", [])
-                        card_key = "note_overview"
-                        logger.info("Notes fetched via fallback intent handler")
-                except Exception as ne:
-                    logger.error(f"Error fetching notes: {ne}")
-
-            logger.info(f"Final card key: {card_key}")
-            return card_key, data_dict
-            
-        except Exception as e:
-            logger.error(f"Error extracting data from tools: {str(e)}", exc_info=True)
-            return "general", {
-                "account_overview": None,
-                "rewards_overview": None,
-                "facility_overview": None,
-                "order_overview": None,
-                "note_overview": []
-            }
-    
-    def chat(
-        self,
-        user_message: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
-        conversation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Simplified chat interface
-        """
-        try:
-            logger.info("Chat interface called")
-            if conversation_history is None:
-                conversation_history = []
-            
-            return self.process_message(
-                user_message,
-                conversation_history,
-                conversation_id=conversation_id
-            )
-            
-        except Exception as e:
-            logger.error(f"Error in chat interface: {str(e)}", exc_info=True)
-            return {
-                "final_response": f"I encountered an error: {str(e)}",
-                "card_key": "error",
-                "success": False,
-                "error": str(e)
-            }
-
-    def _build_account_summary(self, acc: Dict[str, Any]) -> str:
-        lines = []
-        lines.append("Here is a summary of your account:\n")
-        lines.append(f"- Account Name: {acc.get('name','')}\n")
-        lines.append(f"- Status: {acc.get('status','')}\n")
-        lines.append(f"- Account ID: {acc.get('account_id','')}\n")
-        address = ", ".join(filter(None, [acc.get('address_line1',''), acc.get('address_city',''), acc.get('address_state',''), acc.get('address_postal_code','')]))
-        lines.append(f"- Address: {address}\n")
-        lines.append(f"- Pricing Model: {acc.get('pricing_model','')}\n\n")
-        lines.append("Loyalty & Rewards:\n")
-        lines.append(f"- Current Loyalty Tier: {acc.get('current_tier','')} (next tier: {acc.get('next_tier','')}, {acc.get('points_to_next_tier',0)} points needed)\n")
-        lines.append(f"- Loyalty Points Balance: {acc.get('points_earned_this_quarter',0)} (pending: {acc.get('pending_balance',0)})\n")
-        lines.append(f"- Free Vials Available: {acc.get('free_vials_available',0)}\n")
-        lines.append(f"- Rewards Redeemed Toward Next Free Vial: {acc.get('rewards_redeemed_towards_next_free_vial', acc.get('rewards_redeemed_towards_next_free_vial', acc.get('rewards_redeemed_towards_next_free_vial', 0)))}\n\n")
-        lines.append("Other Details:\n")
-        lines.append(f"- Evolux Level: {acc.get('evolux_level','')}\n")
-        lines.append(f"- Reward Program Opt-in Status: {acc.get('rewards_status','')}\n\n")
-        lines.append("Let me know if you need more detailed information or have other questions!")
-        return "".join(lines)
-
-    def _build_rewards_summary(self, acc: Dict[str, Any]) -> str:
-        tier = acc.get('current_tier','')
-        next_tier = acc.get('next_tier','')
-        to_next = acc.get('points_to_next_tier',0)
-        balance = acc.get('points_earned_this_quarter',0)
-        pending = acc.get('pending_balance',0)
-        free_vials = acc.get('free_vials_available',0)
-        required_for_free = acc.get('rewards_required_for_next_free_vial',0)
-        redeemed_toward_free = acc.get('rewards_redeemed_towards_next_free_vial',0)
-        rewards_status = acc.get('rewards_status','')
-        lines = []
-        lines.append("Here are your current loyalty & rewards details:\n\n")
-        lines.append(f"- Current Tier: {tier} (next tier: {next_tier}, {to_next} points needed)\n")
-        lines.append(f"- Points Balance: {balance} (pending: {pending})\n")
-        lines.append(f"- Free Vials Available: {free_vials}\n")
-        lines.append(f"- Progress to Next Free Vial: {redeemed_toward_free}/{required_for_free}\n")
-        lines.append(f"- Rewards Opt-in Status: {rewards_status}\n")
-        return "".join(lines)
-
-    def _build_facility_summary(self, fac: Dict[str, Any]) -> str:
-        lines = []
-        lines.append("Here is a summary of the facility:\n")
-        lines.append(f"- Facility Name: {fac.get('name','')}\n")
-        lines.append(f"- Status: {fac.get('status','')}\n")
-        lines.append(f"- Facility ID: {fac.get('id','')}\n")
-        lines.append(f"- Medical License: {fac.get('medical_license_number','')} ({fac.get('medical_license_state','')})\n")
-        lines.append(f"- Agreement Status: {fac.get('agreement_status','')}\n")
-        lines.append(f"- Account: {fac.get('account_name','')} ({fac.get('account_id','')})\n")
-        return "".join(lines)
-
-    def _build_notes_summary(self, notes: List[Dict[str, Any]]) -> str:
-        if not notes:
-            return "No notes found for your query."
-        lines = ["Here are your notes:\n\n"]
-        for n in notes:
-            ts = n.get('created_at') or n.get('updated_at') or ''
-            lines.append(f"- ({ts}) {n.get('content','')}\n")
-        return "".join(lines)
 
 
 # Global instance (will be initialized in main.py)
@@ -496,7 +299,7 @@ def get_agent() -> SingleAgent:
     return _agent_instance
 
 
-def initialize_agent(api_key: Optional[str] = None, model_name: str = "gpt-4"):
+def initialize_agent(api_key: Optional[str] = None, model_name: str = "gpt-4o-mini"):
     """Initialize the global agent instance"""
     global _agent_instance
     _agent_instance = SingleAgent(api_key=api_key, model_name=model_name)
