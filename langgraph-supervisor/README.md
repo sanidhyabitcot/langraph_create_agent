@@ -181,8 +181,8 @@ agent = create_agent(
 The agent has access to 4 tools:
 1. `fetch_account_details(account_id)` - Get account info
 2. `fetch_facility_details(facility_id)` - Get facility info
-3. `save_note(user_id, content)` - Save notes for users
-4. `fetch_notes(user_id, date, last_n, order)` - Retrieve notes with filtering and ordering
+3. `save_note(account_id, content)` - Save notes for an account
+4. `fetch_notes(account_id, date, last_n, order)` - Retrieve account-scoped notes with filtering and ordering
    - Supports: "fetch all notes", "fetch last N notes", "fetch first N notes", "fetch notes for DD/MM/YYYY"
 
 ## Request Format

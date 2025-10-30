@@ -14,7 +14,10 @@ class MockDataStore:
         """Initialize mock data"""
         self._initialize_accounts()
         self._initialize_facilities()
+        # Legacy user-based notes (kept for compatibility)
         self.notes: Dict[str, List[Note]] = {}
+        # Account-based notes (preferred)
+        self.account_notes: Dict[str, List[Note]] = {}
         self._initialize_notes()
     
     def _initialize_accounts(self):
@@ -163,6 +166,16 @@ class MockDataStore:
                     updated_at=datetime(2025, 10, 29, 10, 0, 0)
                 )
             ]
+        # Seed account-based notes for primary account
+        self.account_notes["A-011977763"] = [
+            Note(
+                note_id="AN-000001",
+                user_id="account:A-011977763",
+                content="Account kickoff notes.",
+                created_at=now,
+                updated_at=now
+            )
+        ]
     
     def get_account(self, account_id: str) -> Optional[Account]:
         """Get account by ID"""
@@ -180,37 +193,38 @@ class MockDataStore:
         """Get all facilities"""
         return list(self.facilities.values())
     
-    def save_note(self, user_id: str, content: str) -> Note:
-        """Save a note"""
-        if user_id not in self.notes:
-            self.notes[user_id] = []
+    def save_note(self, account_id: str, content: str) -> Note:
+        """Save a note under an account"""
+        if account_id not in self.account_notes:
+            self.account_notes[account_id] = []
         
         note = Note(
-            note_id=f"N-{len(self.notes[user_id]) + 1:06d}",
-            user_id=user_id,
+            note_id=f"AN-{len(self.account_notes[account_id]) + 1:06d}",
+            user_id=f"account:{account_id}",
             content=content,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
         
-        self.notes[user_id].append(note)
+        self.account_notes[account_id].append(note)
         return note
     
     def get_notes(
         self,
-        user_id: Optional[str] = None,
+        account_id: Optional[str] = None,
         date: Optional[str] = None,
         last_n: int = 5,
         order: str = "desc"
     ) -> List[Note]:
-        """Get notes with optional filters and ordering"""
-        all_notes = []
+        """Get notes with optional filters and ordering (account-scoped)"""
+        all_notes: List[Note] = []
         
-        if user_id:
-            all_notes = self.notes.get(user_id, [])
+        if account_id:
+            all_notes = self.account_notes.get(account_id, [])
         else:
-            for user_notes in self.notes.values():
-                all_notes.extend(user_notes)
+            # Aggregate all account notes
+            for acc_notes in self.account_notes.values():
+                all_notes.extend(acc_notes)
         
         if date:
             all_notes = [

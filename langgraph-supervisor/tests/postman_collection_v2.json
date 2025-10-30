@@ -112,7 +112,7 @@
         "header": [{"key": "Content-Type", "value": "application/json"}],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"message\": \"Save a note for user123: Discussed account status\",\n  \"card_key\": \"note_saved_card\"\n}"
+          "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"message\": \"Save a note: Discussed account status\",\n  \"account_id\": \"A-011977763\",\n  \"card_key\": \"note_saved_card\"\n}"
         },
         "url": {
           "raw": "{{base_url}}/chat",

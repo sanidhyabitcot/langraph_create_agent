@@ -128,7 +128,7 @@
         "header": [{"key": "Content-Type", "value": "application/json"}],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"text\": \"save note: Meeting with Dimod Account completed. Action items: send pricing deck.\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
+          "raw": "{\n  \"text\": \"save note: Meeting with Dimod Account completed. Action items: send pricing deck.\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"account_id\": \"A-011977763\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
         },
         "url": {
           "raw": "{{base_url}}/chat",
@@ -144,7 +144,7 @@
         "header": [{"key": "Content-Type", "value": "application/json"}],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"text\": \"fetch all notes\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
+          "raw": "{\n  \"text\": \"fetch all notes\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"account_id\": \"A-011977763\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
         },
         "url": {
           "raw": "{{base_url}}/chat",
@@ -160,7 +160,7 @@
         "header": [{"key": "Content-Type", "value": "application/json"}],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"text\": \"fetch last 2 notes\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
+          "raw": "{\n  \"text\": \"fetch last 2 notes\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"account_id\": \"A-011977763\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
         },
         "url": {
           "raw": "{{base_url}}/chat",
@@ -176,7 +176,7 @@
         "header": [{"key": "Content-Type", "value": "application/json"}],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"text\": \"fetch notes for 29/10/2025\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
+          "raw": "{\n  \"text\": \"fetch notes for 29/10/2025\",\n  \"user_id\": \"sumer.choudhary@bitcot.com\",\n  \"account_id\": \"A-011977763\",\n  \"conversation_id\": \"{{conversation_id}}\"\n}"
         },
         "url": {
           "raw": "{{base_url}}/chat",

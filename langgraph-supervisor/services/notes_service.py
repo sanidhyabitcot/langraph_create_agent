@@ -24,21 +24,21 @@ class NotesService:
             logger.error(f"Error initializing NotesService: {str(e)}", exc_info=True)
             raise
     
-    def save_note(self, user_id: str, content: str) -> Dict[str, Any]:
+    def save_note(self, account_id: str, content: str) -> Dict[str, Any]:
         """
-        Save a note for a user
+        Save a note for an account
         
         Args:
-            user_id: User identifier
+            account_id: Account identifier
             content: Note content
             
         Returns:
             Saved note details
         """
         try:
-            logger.info(f"Saving note for user: {user_id}")
-            note = self.store.save_note(user_id, content)
-            logger.info(f"Note saved successfully for user: {user_id}")
+            logger.info(f"Saving note for account: {account_id}")
+            note = self.store.save_note(account_id, content)
+            logger.info(f"Note saved successfully for account: {account_id}")
             return {
                 "success": True,
                 "data": note.dict(),
@@ -53,7 +53,7 @@ class NotesService:
     
     def fetch_notes(
         self,
-        user_id: Optional[str] = None,
+        account_id: Optional[str] = None,
         date: Optional[str] = None,
         last_n: int = 5,
         order: str = "desc"
@@ -62,7 +62,7 @@ class NotesService:
         Fetch notes with optional filters
         
         Args:
-            user_id: Optional user ID filter
+            account_id: Optional account ID filter
             date: Optional date filter (YYYY-MM-DD)
             last_n: Number of recent notes to return
             
@@ -70,7 +70,7 @@ class NotesService:
             Dictionary with notes list
         """
         try:
-            logger.info(f"Fetching notes for user: {user_id}, date: {date}, last_n: {last_n}")
+            logger.info(f"Fetching notes for account: {account_id}, date: {date}, last_n: {last_n}")
             # Normalize date formats like DD/MM/YYYY to YYYY-MM-DD
             if date and "/" in date:
                 try:
@@ -79,7 +79,7 @@ class NotesService:
                 except Exception:
                     pass
             notes = self.store.get_notes(
-                user_id=user_id,
+                account_id=account_id,
                 date=date,
                 last_n=last_n,
                 order=order

@@ -71,14 +71,20 @@ def fetch_facility_details(config: RunnableConfig, facility_id: Optional[str] = 
 
 
 @tool
-def save_note(config: RunnableConfig, content: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+def save_note(
+    config: RunnableConfig,
+    content: str,
+    account_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Save notes or meeting minutes for a user.
     
     Args:
-        config: Configuration object containing user_id
+        config: Configuration object containing account_id (preferred) or user_id
         content: The note content or meeting minutes to save
-        user_id: Optional user ID. If not provided, will be extracted from config.
+        account_id: Optional account ID. If not provided, will be extracted from config.
+        user_id: Optional user ID. Deprecated pathway; retained for backward compatibility.
         
     Returns:
         Dictionary with saved note details
@@ -88,36 +94,44 @@ def save_note(config: RunnableConfig, content: str, user_id: Optional[str] = Non
     - Store meeting minutes
     - Record information
     """
-    # Extract user_id from config if not provided as parameter
+    # Prefer account_id for scoping notes; fallback to legacy user_id if needed
+    if not account_id:
+        account_id = config.get("configurable", {}).get("account_id")
+    
+    if account_id:
+        return notes_service.save_note(account_id=account_id, content=content)
+    
+    # Legacy fallback (not recommended)
     if not user_id:
         user_id = config.get("configurable", {}).get("user_id")
+    if user_id:
+        # Maintain backward compatibility in case older callers still pass user_id
+        return notes_service.save_note(account_id=user_id, content=content)
     
-    if not user_id:
-        return {
-            "success": False,
-            "error": "user_id is required. Please provide it in the request or config."
-        }
-    
-    return notes_service.save_note(user_id, content)
+    return {
+        "success": False,
+        "error": "account_id is required. Provide it in the request or config."
+    }
 
 
 @tool
 def fetch_notes(
     config: RunnableConfig,
-    user_id: Optional[str] = None,
+    account_id: Optional[str] = None,
     date: Optional[str] = None,
     last_n: Optional[int] = None,
     order: Optional[str] = None,
     first_limit: Optional[int] = None,
     to_date: Optional[str] = None,
-    from_date: Optional[str] = None
+    from_date: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Retrieve notes based on filters (user_id, date, or last N notes).
     
     Args:
-        config: Configuration object containing user_id
-        user_id: Optional user ID. If not provided, will be extracted from config.
+        config: Configuration object containing account_id (preferred)
+        account_id: Optional account ID. If not provided, will be extracted from config.
         date: Optional date in YYYY-MM-DD format to filter notes
         last_n: Number of recent notes to return (default: 5)
         order: Order of results - "desc" (newest first) or "asc" (oldest first)
@@ -133,9 +147,9 @@ def fetch_notes(
     - "Fetch last N notes", "Fetch first N notes"
     - "Fetch notes from date", "Show notes from 2024-01-01"
     """
-    # Extract user_id from config if not provided as parameter
-    if not user_id:
-        user_id = config.get("configurable", {}).get("user_id")
+    # Extract account_id from config if not provided as parameter
+    if not account_id:
+        account_id = config.get("configurable", {}).get("account_id")
     
     # Set defaults if not provided
     if last_n is None and first_limit is None:
@@ -144,7 +158,7 @@ def fetch_notes(
         order = "desc"
     
     return notes_service.fetch_notes(
-        user_id=user_id,
+        account_id=account_id,
         date=date,
         last_n=last_n,
         order=order
